@@ -3,12 +3,12 @@
     console.log('🐝 Loading Enhanced Beelingua Bot...');
     
     // GANTI INI dengan username GitHub kamu
-    const GITHUB_USER = 'YOUR_GITHUB_USERNAME';  // ⚠️ EDIT INI!
+    const GITHUB_USER = 'Oikpe';  // ⚠️ EDIT INI!
     const REPO = 'beelingua-enhanced-bot';
     
     const urls = [
-        `https://cdn.jsdelivr.net/gh/${GITHUB_USER}/${REPO}/enhanced-bot.js`,
-        `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO}/main/enhanced-bot.js`
+        `https://cdn.jsdelivr.net/gh/${Oikpe}/${Ayam-geprek}/enhanced-bot.js`,
+        `https://raw.githubusercontent.com/${Oikpe}/${Ayam-geprek}/main/enhanced-bot.js`
     ];
     
     // Hide webdriver
