@@ -1,0 +1,16 @@
+{
+    "version": "3.0",
+    "name": "Enhanced Beelingua Bot",
+    "features": [
+        "Smart Memory System",
+        "Advanced Video Control", 
+        "Anti-Detection",
+        "Export/Import Memory"
+    ],
+    "changelog": [
+        "Added comprehensive memory system",
+        "Enhanced video speed control up to 5x",
+        "Improved UI with tabbed interface",
+        "Better anti-detection methods"
+    ]
+}
