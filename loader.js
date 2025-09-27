@@ -4,7 +4,7 @@
     
     // GANTI INI dengan username GitHub kamu
     const GITHUB_USER = 'Oikpe';  // ⚠️ EDIT INI!
-    const REPO = 'beelingua-enhanced-bot';
+    const REPO = 'Ayam-geprek';
     
     const urls = [
         `https://cdn.jsdelivr.net/gh/${Oikpe}/${Ayam-geprek}/enhanced-bot.js`,
