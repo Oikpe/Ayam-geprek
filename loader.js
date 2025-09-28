@@ -1,9 +1,6 @@
-// Enhanced Beelingua Bot Loader
+// Ultra Bot Loader
 (function() {
-    console.log('🐝 Loading Enhanced Beelingua Bot...');
-    
-    // GANTI INI dengan username GitHub kamu
-    const GITHUB_USER = 'Oikpe';  // ⚠️ EDIT INI!
+    const GITHUB_USER = 'Oikpe'; 
     const REPO = 'Ayam-geprek';
     
     const urls = [
@@ -11,38 +8,25 @@
         `https://raw.githubusercontent.com/${Oikpe}/${Ayam-geprek}/main/enhanced-bot.js`
     ];
     
-    // Hide webdriver
-    try {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    } catch (e) {}
-    
     async function loadBot() {
         for (const url of urls) {
             try {
-                console.log(`🔄 Trying: ${url}`);
-                const response = await fetch(url, { 
-                    cache: 'no-cache',
-                    headers: { 'User-Agent': 'Mozilla/5.0 Chrome/91.0' }
-                });
-                
+                const response = await fetch(url, { cache: 'no-cache' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 
                 const code = await response.text();
                 eval(code);
-                
-                console.log('✅ Enhanced Bee Bot loaded successfully!');
-                console.log('📱 Look for orange panel in top-right corner');
+                console.log('Ultra Bot v4.1 loaded successfully!');
                 return;
-                
             } catch (error) {
-                console.warn(`❌ Failed ${url}: ${error.message}`);
+                console.warn(`Failed: ${error.message}`);
             }
         }
-        throw new Error('All download URLs failed');
+        throw new Error('All URLs failed');
     }
     
     loadBot().catch(error => {
-        console.error('🚫 Complete loading failure:', error);
-        alert('Failed to load Enhanced Bee Bot.\n\nTroubleshooting:\n1. Check internet connection\n2. Verify GitHub username is correct\n3. Try refreshing page');
+        console.error('Loading failed:', error);
+        alert('Ultra Bot loading failed. Check console.');
     });
 })();
