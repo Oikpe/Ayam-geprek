@@ -1,526 +1,734 @@
-// Beelingua Enhanced Bot v3.0 - Production Ready
-// Features: Quiz Automation + Memory System + Video Speed Control
+// Ultra-Optimized Beelingua Bot v4.1 - Memory Safe + 15ms Speed
 (() => {
     'use strict';
     
-    console.log('🚀 Beelingua Enhanced Bot v3.0 Loading...');
+    console.log('Ultra-Optimized Bot v4.1 Loading...');
     
-    if (window.beelinguaBotActive) {
-        console.log('⚠️ Bot already running');
+    if (window.ultraBotActive) {
+        console.log('Bot already active');
         return;
     }
-    window.beeinguaBotActive = true;
+    window.ultraBotActive = true;
 
-    // Memory System - Stores question-answer pairs locally
-    const memoryDB = {
-        storageKey: 'beelingua_memory_enhanced',
+    // MEMORY-SAFE Storage System (Max 1MB, Auto-cleanup)
+    const safeMemory = {
+        storage: null,
+        data: new Map(), // Use Map for better performance
+        maxSize: 1000, // Maximum 1000 questions
+        maxStorageSize: 1024 * 1024, // 1MB limit
         
-        load() {
+        init() {
             try {
-                const data = localStorage.getItem(this.storageKey);
-                return data ? JSON.parse(data) : {
-                    questions: {},
-                    stats: { total: 0, learned: 0, lastUpdate: Date.now() }
-                };
+                if (typeof Storage !== 'undefined' && localStorage) {
+                    this.storage = 'localStorage';
+                    this.loadFromStorage();
+                } else {
+                    this.storage = 'memory';
+                    console.log('Using memory-only storage');
+                }
             } catch (e) {
-                return { questions: {}, stats: { total: 0, learned: 0, lastUpdate: Date.now() } };
+                this.storage = 'memory';
+                console.warn('Storage unavailable, using memory only');
+            }
+            
+            console.log(`Memory system: ${this.storage} | Questions: ${this.data.size}`);
+            return this;
+        },
+        
+        loadFromStorage() {
+            try {
+                const stored = localStorage.getItem('beelingua_safe_v4');
+                if (stored && stored.length < this.maxStorageSize) {
+                    const parsed = JSON.parse(stored);
+                    this.data = new Map(Object.entries(parsed.questions || {}));
+                    this.cleanup(); // Auto-cleanup on load
+                }
+            } catch (e) {
+                console.warn('Failed to load memory:', e);
+                this.data = new Map();
             }
         },
         
-        save(data) {
+        save() {
+            if (this.storage === 'memory') return;
+            
             try {
-                data.stats.lastUpdate = Date.now();
-                localStorage.setItem(this.storageKey, JSON.stringify(data));
+                const obj = { questions: Object.fromEntries(this.data) };
+                const serialized = JSON.stringify(obj);
+                
+                if (serialized.length > this.maxStorageSize) {
+                    this.cleanup();
+                    return this.save(); // Retry after cleanup
+                }
+                
+                localStorage.setItem('beelingua_safe_v4', serialized);
                 return true;
             } catch (e) {
-                console.warn('Save failed:', e);
+                console.warn('Memory save failed:', e);
+                this.cleanup();
                 return false;
             }
         },
         
-        createKey(questionText) {
-            if (!questionText) return null;
-            const clean = questionText.toLowerCase()
+        cleanup() {
+            if (this.data.size <= this.maxSize) return;
+            
+            // Keep only most recent 80% of entries
+            const keepCount = Math.floor(this.maxSize * 0.8);
+            const entries = Array.from(this.data.entries());
+            
+            // Sort by timestamp (assuming newer entries have later keys)
+            entries.sort((a, b) => a[0].localeCompare(b[0]));
+            
+            // Keep only recent entries
+            this.data.clear();
+            entries.slice(-keepCount).forEach(([key, value]) => {
+                this.data.set(key, value);
+            });
+            
+            console.log(`Memory cleanup: kept ${keepCount} entries`);
+        },
+        
+        learn(question, answer) {
+            if (!question || !answer || question.length < 10) return false;
+            
+            // Generate efficient key (max 50 chars)
+            const key = question.toLowerCase()
                 .replace(/[^\w\s]/g, '')
                 .replace(/\s+/g, ' ')
-                .trim();
+                .trim()
+                .substring(0, 50);
             
-            let hash = 0;
-            for (let i = 0; i < clean.length; i++) {
-                hash = ((hash << 5) - hash) + clean.charCodeAt(i);
-                hash = hash & hash;
+            this.data.set(key, answer);
+            
+            // Auto-cleanup if needed
+            if (this.data.size > this.maxSize) {
+                this.cleanup();
             }
             
-            const words = clean.split(' ').filter(w => w.length > 2).slice(0, 3);
-            return `${Math.abs(hash)}_${clean.length}_${words.join('_')}`;
+            // Async save to not block execution
+            setTimeout(() => this.save(), 0);
+            
+            console.log(`Learned: "${question.substring(0, 30)}..." -> ${answer}`);
+            return true;
         },
         
-        learn(question, answer, source = 'auto') {
-            const data = this.load();
-            const key = this.createKey(question);
+        recall(question) {
+            if (!question) return null;
             
-            if (!key) return false;
+            const key = question.toLowerCase()
+                .replace(/[^\w\s]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .substring(0, 50);
             
-            data.questions[key] = {
-                q: question.substring(0, 200),
-                a: answer,
-                count: (data.questions[key]?.count || 0) + 1,
-                source: source,
-                time: Date.now()
-            };
-            
-            data.stats.total = Object.keys(data.questions).length;
-            data.stats.learned++;
-            
-            console.log(`🧠 Learned: ${question.substring(0, 40)}... → ${answer}`);
-            return this.save(data);
-        },
-        
-        find(questionText) {
-            const data = this.load();
-            const key = this.createKey(questionText);
-            
-            if (key && data.questions[key]) {
-                const result = data.questions[key];
-                console.log(`🎯 Memory hit: ${result.a} (${result.count}x)`);
-                return { answer: result.a, confidence: result.count, type: 'exact' };
+            // Exact match first (O(1) lookup)
+            if (this.data.has(key)) {
+                console.log(`Memory hit: ${this.data.get(key)}`);
+                return this.data.get(key);
             }
             
-            // Fuzzy search
-            const words = questionText.toLowerCase().split(/\W+/).filter(w => w.length > 3);
+            // Quick fuzzy search (limited to prevent performance issues)
+            const words = key.split(' ').filter(w => w.length > 3);
+            if (words.length < 2) return null;
+            
             let bestMatch = null;
             let bestScore = 0;
+            let checked = 0;
             
-            for (const [qKey, qData] of Object.entries(data.questions)) {
-                const qWords = qData.q.toLowerCase().split(/\W+/).filter(w => w.length > 3);
-                const common = words.filter(w => qWords.includes(w));
-                const score = common.length / Math.max(words.length, qWords.length);
+            for (const [storedKey, answer] of this.data) {
+                if (checked++ > 100) break; // Limit search to prevent lag
                 
-                if (score > bestScore && score > 0.5) {
+                const storedWords = storedKey.split(' ').filter(w => w.length > 3);
+                const commonWords = words.filter(w => storedWords.includes(w));
+                const score = commonWords.length / Math.max(words.length, storedWords.length);
+                
+                if (score > bestScore && score > 0.6) {
                     bestScore = score;
-                    bestMatch = qData;
+                    bestMatch = answer;
                 }
             }
             
             if (bestMatch) {
-                console.log(`🔍 Fuzzy match: ${bestMatch.a} (${Math.round(bestScore * 100)}%)`);
-                return { answer: bestMatch.a, confidence: bestMatch.count * bestScore, type: 'fuzzy' };
+                console.log(`Fuzzy match: ${bestMatch} (${Math.round(bestScore * 100)}%)`);
             }
             
-            return null;
+            return bestMatch;
         },
         
         getStats() {
-            const data = this.load();
             return {
-                total: Object.keys(data.questions).length,
-                learned: data.stats.learned,
-                lastUpdate: new Date(data.stats.lastUpdate).toLocaleString()
+                total: this.data.size,
+                storage: this.storage,
+                memoryUsage: this.storage === 'localStorage' ? 
+                    Math.round(JSON.stringify(Object.fromEntries(this.data)).length / 1024) + 'KB' : 
+                    'Memory only'
             };
         },
         
         export() {
-            const data = this.load();
+            const data = Object.fromEntries(this.data);
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `beelingua_memory_${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `beelingua_memory_${Date.now()}.json`;
             a.click();
             URL.revokeObjectURL(url);
         },
         
         clear() {
-            localStorage.removeItem(this.storageKey);
-            console.log('🗑️ Memory cleared');
-        }
-    };
-
-    // Enhanced Video Control
-    const videoController = {
-        findAllVideos() {
-            const videos = [];
-            
-            // Find direct video elements
-            document.querySelectorAll('video').forEach(v => videos.push(v));
-            
-            // Find in iframes
-            document.querySelectorAll('iframe').forEach(iframe => {
+            this.data.clear();
+            if (this.storage === 'localStorage') {
                 try {
-                    const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
-                    if (iDoc) {
-                        iDoc.querySelectorAll('video').forEach(v => videos.push(v));
-                    }
+                    localStorage.removeItem('beelingua_safe_v4');
                 } catch (e) {}
-            });
-            
-            return videos;
+            }
+            console.log('Memory cleared');
+        }
+    }.init();
+
+    // ULTRA-AGGRESSIVE Video Controller (15ms intervals)
+    const ultraVideo = {
+        videos: [],
+        forceInterval: null,
+        
+        findVideos() {
+            this.videos = Array.from(document.querySelectorAll('video'));
+            return this.videos.length;
         },
         
         setSpeed(speed) {
-            const videos = this.findAllVideos();
-            let changed = 0;
+            this.findVideos();
             
-            videos.forEach(video => {
-                try {
-                    // Force set playback rate
-                    Object.defineProperty(video, 'playbackRate', {
-                        set: function(value) {
-                            this._playbackRate = speed;
-                            // Try multiple methods to ensure it sticks
-                            if (this.duration && !isNaN(this.duration)) {
-                                this.defaultPlaybackRate = speed;
-                                try {
-                                    this.mozPreservesPitch = false;
-                                    this.webkitPreservesPitch = false;
-                                    this.preservesPitch = false;
-                                } catch (e) {}
-                            }
-                        },
-                        get: function() {
-                            return this._playbackRate || speed;
-                        },
-                        configurable: true
-                    });
-                    
-                    video.playbackRate = speed;
-                    video.defaultPlaybackRate = speed;
-                    changed++;
-                    
-                } catch (e) {
-                    console.warn('Failed to set video speed:', e);
-                }
-            });
-            
-            // Override any speed restrictions globally
-            this.overrideGlobalControls(speed);
-            
-            console.log(`🎥 Set speed ${speed}x for ${changed} videos`);
-            return changed > 0;
-        },
-        
-        overrideGlobalControls(speed) {
-            // Override HTMLVideoElement prototype
-            if (window.HTMLVideoElement && HTMLVideoElement.prototype) {
-                const originalSetter = Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype, 'playbackRate')?.set;
-                
-                if (originalSetter) {
-                    Object.defineProperty(HTMLVideoElement.prototype, 'playbackRate', {
-                        set: function(value) {
-                            this._forcedSpeed = speed;
-                            try {
-                                originalSetter.call(this, speed);
-                            } catch (e) {
-                                this._playbackRate = speed;
-                            }
-                        },
-                        get: function() {
-                            return this._forcedSpeed || this._playbackRate || speed;
-                        },
-                        configurable: true
-                    });
-                }
-            }
-            
-            // Inject CSS to show controls
-            const css = `
-                video {
-                    -webkit-user-select: none !important;
-                    user-select: none !important;
-                }
-                video::-webkit-media-controls-panel {
-                    display: flex !important;
-                }
-                video::-webkit-media-controls-play-button {
-                    display: flex !important;
-                }
-                video::-webkit-media-controls-timeline {
-                    display: flex !important;
-                }
-            `;
-            
-            let style = document.getElementById('video-override');
-            if (!style) {
-                style = document.createElement('style');
-                style.id = 'video-override';
-                document.head.appendChild(style);
-            }
-            style.textContent = css;
-        },
-        
-        skipTo(seconds) {
-            const videos = this.findAllVideos();
-            let skipped = 0;
-            
-            videos.forEach(video => {
-                try {
-                    if (video.duration && seconds <= video.duration) {
-                        video.currentTime = seconds;
-                        skipped++;
-                    }
-                } catch (e) {}
-            });
-            
-            return skipped > 0;
-        },
-        
-        skipToEnd() {
-            const videos = this.findAllVideos();
-            let skipped = 0;
-            
-            videos.forEach(video => {
-                try {
-                    if (video.duration) {
-                        video.currentTime = Math.max(0, video.duration - 3);
-                        skipped++;
-                    }
-                } catch (e) {}
-            });
-            
-            return skipped > 0;
-        },
-        
-        getCurrentInfo() {
-            const videos = this.findAllVideos();
-            const info = videos.map(v => ({
-                currentTime: Math.round(v.currentTime || 0),
-                duration: Math.round(v.duration || 0),
-                speed: v.playbackRate || 1,
-                src: v.src ? v.src.substring(0, 50) + '...' : 'blob/stream'
-            }));
-            
-            return info;
-        }
-    };
-
-    // Anti-detection
-    const stealth = {
-        init() {
-            try {
-                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            } catch (e) {}
-            this.baseDelay = 100 + Math.random() * 100;
-        },
-        
-        wait(ms = 100) {
-            const delay = ms + (Math.random() * ms * 0.2);
-            return new Promise(r => setTimeout(r, delay));
-        },
-        
-        async click(element) {
-            if (!element) return false;
-            try {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.wait(100);
-                element.click();
-                await this.wait(50);
-                return true;
-            } catch (e) {
+            if (this.videos.length === 0) {
+                console.log('No videos found');
                 return false;
             }
+            
+            // Clear any existing interval
+            if (this.forceInterval) {
+                clearInterval(this.forceInterval);
+            }
+            
+            // Apply initial speed
+            this.videos.forEach(video => {
+                this.forceVideoSpeed(video, speed);
+            });
+            
+            // Force speed every 15ms (ultra-aggressive)
+            this.forceInterval = setInterval(() => {
+                this.videos.forEach(video => {
+                    if (Math.abs(video.playbackRate - speed) > 0.1) {
+                        this.forceVideoSpeed(video, speed);
+                    }
+                });
+            }, 15);
+            
+            // Stop forcing after 10 seconds
+            setTimeout(() => {
+                if (this.forceInterval) {
+                    clearInterval(this.forceInterval);
+                    this.forceInterval = null;
+                }
+            }, 10000);
+            
+            console.log(`Ultra-aggressive speed control: ${speed}x on ${this.videos.length} videos`);
+            return true;
+        },
+        
+        forceVideoSpeed(video, speed) {
+            try {
+                // Method 1: Direct assignment
+                video.playbackRate = speed;
+                
+                // Method 2: Property override
+                Object.defineProperty(video, 'playbackRate', {
+                    get: () => speed,
+                    set: () => {},
+                    configurable: true
+                });
+                
+                // Method 3: Prototype manipulation
+                video.__proto__.playbackRate = speed;
+                
+                // Method 4: Default rate
+                video.defaultPlaybackRate = speed;
+                
+                // Method 5: Dispatch custom event
+                video.dispatchEvent(new Event('ratechange'));
+                
+            } catch (e) {
+                // Silently continue if any method fails
+            }
+        },
+        
+        skip() {
+            this.findVideos();
+            let skipped = 0;
+            
+            this.videos.forEach(video => {
+                try {
+                    if (video.duration) {
+                        video.currentTime = Math.max(0, video.duration - 1);
+                        skipped++;
+                    }
+                } catch (e) {}
+            });
+            
+            return skipped;
         }
     };
 
-    // Enhanced UI
+    // HYPER-SPEED Quiz Engine (15ms delays)
+    const ultraBot = {
+        running: false,
+        stats: { q: 0, correct: 0, learned: 0 },
+        
+        // Ultra-fast element finding (cached selectors)
+        questionCache: null,
+        choiceCache: null,
+        
+        getQuestion() {
+            if (this.questionCache && document.contains(this.questionCache)) {
+                return this.questionCache.innerText?.trim();
+            }
+            
+            // Fast selector strategy
+            const selectors = ['h1', 'h2', 'h3', '[class*="question"]'];
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el?.innerText && el.innerText.trim().length > 20) {
+                    this.questionCache = el;
+                    return el.innerText.trim();
+                }
+            }
+            
+            this.questionCache = null;
+            return null;
+        },
+        
+        getChoices() {
+            if (this.choiceCache && this.choiceCache.every(el => document.contains(el))) {
+                return this.choiceCache;
+            }
+            
+            // Multiple fast strategies
+            const strategies = [
+                () => document.querySelectorAll('p').values(),
+                () => document.querySelectorAll('[class*="choice"], [class*="option"]').values(),
+                () => document.querySelectorAll('button, input[type="radio"]').values()
+            ];
+            
+            for (const strategy of strategies) {
+                const elements = Array.from(strategy()).filter(el => {
+                    const text = el.innerText?.trim();
+                    return text && (['A', 'B', 'C', 'D', 'E'].includes(text) || el.offsetHeight > 0);
+                });
+                
+                if (elements.length >= 2) {
+                    this.choiceCache = elements;
+                    return elements;
+                }
+            }
+            
+            this.choiceCache = null;
+            return [];
+        },
+        
+        getDragElements() {
+            return {
+                draggable: Array.from(document.querySelectorAll('[draggable="true"], .draggable')),
+                dropzones: Array.from(document.querySelectorAll('.dropzone, [class*="drop"]')),
+                blanks: Array.from(document.querySelectorAll('input[type="text"], .blank'))
+            };
+        },
+        
+        isCorrect() {
+            return document.querySelector('[class*="correct"], [class*="success"]') !== null ||
+                   /correct|success|benar/i.test(document.body.innerText);
+        },
+        
+        isWrong() {
+            return document.querySelector('[class*="incorrect"], [class*="wrong"], [class*="error"]') !== null ||
+                   /incorrect|wrong|error|salah/i.test(document.body.innerText);
+        },
+        
+        // ULTRA-FAST click (no delays)
+        instantClick(element) {
+            if (!element) return false;
+            
+            element.click();
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        },
+        
+        // Find and click buttons instantly
+        findAndClick(texts) {
+            const buttons = Array.from(document.querySelectorAll('button, p, a, div'))
+                .filter(el => {
+                    const text = el.innerText?.trim().toLowerCase();
+                    return text && texts.some(t => text.includes(t.toLowerCase()));
+                });
+            
+            if (buttons.length > 0) {
+                this.instantClick(buttons[0]);
+                return true;
+            }
+            return false;
+        },
+        
+        clearErrors() {
+            document.querySelectorAll('[class*="error"], [class*="incorrect"], [class*="wrong"]')
+                .forEach(el => {
+                    try { el.remove(); } catch (e) {}
+                });
+        },
+        
+        // HYPER-SPEED Multiple Choice (15ms delays)
+        async ultraMultipleChoice() {
+            const question = this.getQuestion();
+            const choices = this.getChoices();
+            
+            if (!choices.length) return false;
+            
+            // Try memory first (instant)
+            if (question) {
+                const remembered = safeMemory.recall(question);
+                if (remembered) {
+                    const target = choices.find(el => el.innerText?.trim() === remembered);
+                    if (target) {
+                        this.instantClick(target);
+                        await new Promise(r => setTimeout(r, 15));
+                        this.findAndClick(['check', 'submit']);
+                        await new Promise(r => setTimeout(r, 15));
+                        this.findAndClick(['next', 'continue']);
+                        this.stats.correct++;
+                        this.stats.q++;
+                        return true;
+                    }
+                }
+            }
+            
+            // Ultra-fast brute force (15ms delays)
+            for (const choice of choices) {
+                if (!this.running) break;
+                
+                this.clearErrors();
+                this.instantClick(choice);
+                await new Promise(r => setTimeout(r, 15));
+                
+                this.findAndClick(['check', 'submit']);
+                await new Promise(r => setTimeout(r, 30));
+                
+                if (this.isCorrect()) {
+                    // Learn instantly
+                    if (question) {
+                        const answer = choice.innerText?.trim();
+                        if (answer) {
+                            safeMemory.learn(question, answer);
+                            this.stats.learned++;
+                        }
+                    }
+                    
+                    this.stats.correct++;
+                    this.stats.q++;
+                    
+                    await new Promise(r => setTimeout(r, 15));
+                    this.findAndClick(['next', 'continue']);
+                    return true;
+                }
+                
+                if (this.isWrong()) {
+                    this.clearErrors();
+                    await new Promise(r => setTimeout(r, 15));
+                }
+            }
+            
+            this.stats.q++;
+            return false;
+        },
+        
+        // Ultra-fast Drag & Drop
+        async ultraDragDrop() {
+            const elements = this.getDragElements();
+            
+            if (!elements.draggable.length || !elements.dropzones.length) {
+                return false;
+            }
+            
+            // Try all combinations rapidly (15ms delays)
+            for (const draggable of elements.draggable) {
+                for (const dropzone of elements.dropzones) {
+                    if (!this.running) break;
+                    
+                    try {
+                        // Instant drag simulation
+                        const dataTransfer = new DataTransfer();
+                        
+                        draggable.dispatchEvent(new DragEvent('dragstart', {
+                            bubbles: true,
+                            dataTransfer
+                        }));
+                        
+                        dropzone.dispatchEvent(new DragEvent('drop', {
+                            bubbles: true,
+                            dataTransfer
+                        }));
+                        
+                        draggable.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+                        
+                        await new Promise(r => setTimeout(r, 15));
+                        this.findAndClick(['check', 'submit']);
+                        await new Promise(r => setTimeout(r, 30));
+                        
+                        if (this.isCorrect()) {
+                            this.stats.correct++;
+                            this.stats.q++;
+                            this.findAndClick(['next', 'continue']);
+                            return true;
+                        }
+                        
+                        this.clearErrors();
+                        
+                    } catch (e) {}
+                }
+            }
+            
+            return false;
+        },
+        
+        // Ultra-fast Fill Blanks
+        async ultraFillBlanks() {
+            const elements = this.getDragElements();
+            
+            if (!elements.blanks.length) return false;
+            
+            // Common answers (limited for speed)
+            const answers = ['a', 'an', 'the', 'is', 'are', 'was', 'were', 'have', 'has'];
+            
+            // Try memory first
+            const question = this.getQuestion();
+            if (question) {
+                const remembered = safeMemory.recall(question);
+                if (remembered) {
+                    elements.blanks.forEach(blank => {
+                        blank.value = remembered;
+                        blank.dispatchEvent(new Event('input', { bubbles: true }));
+                    });
+                    
+                    await new Promise(r => setTimeout(r, 15));
+                    this.findAndClick(['check', 'submit']);
+                    await new Promise(r => setTimeout(r, 30));
+                    
+                    if (this.isCorrect()) {
+                        this.stats.correct++;
+                        this.stats.q++;
+                        this.findAndClick(['next', 'continue']);
+                        return true;
+                    }
+                }
+            }
+            
+            // Ultra-fast answer trying (15ms delays)
+            for (const answer of answers) {
+                if (!this.running) break;
+                
+                elements.blanks.forEach(blank => {
+                    blank.value = answer;
+                    blank.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+                
+                await new Promise(r => setTimeout(r, 15));
+                this.findAndClick(['check', 'submit']);
+                await new Promise(r => setTimeout(r, 30));
+                
+                if (this.isCorrect()) {
+                    if (question) {
+                        safeMemory.learn(question, answer);
+                        this.stats.learned++;
+                    }
+                    
+                    this.stats.correct++;
+                    this.stats.q++;
+                    this.findAndClick(['next', 'continue']);
+                    return true;
+                }
+                
+                this.clearErrors();
+            }
+            
+            return false;
+        },
+        
+        // Auto-detect and solve (ultra-fast)
+        async autoSolve() {
+            const choices = this.getChoices();
+            const dragElements = this.getDragElements();
+            
+            if (choices.length >= 2) {
+                return await this.ultraMultipleChoice();
+            } else if (dragElements.draggable.length && dragElements.dropzones.length) {
+                return await this.ultraDragDrop();
+            } else if (dragElements.blanks.length) {
+                return await this.ultraFillBlanks();
+            }
+            
+            return false;
+        },
+        
+        // MAIN ULTRA MODE
+        async startUltra() {
+            if (this.running) return;
+            
+            this.running = true;
+            this.stats = { q: 0, correct: 0, learned: 0 };
+            
+            ui.updateStatus('⚡ ULTRA MODE: 15ms speed...', 'info');
+            ui.setActive('ultra-btn', true);
+            
+            for (let i = 0; i < 300 && this.running; i++) {
+                const success = await this.autoSolve();
+                
+                if (success) {
+                    ui.updateStatus(`ULTRA: Q${this.stats.q} | ✅${this.stats.correct} | 🧠${this.stats.learned}`, 'success');
+                } else {
+                    ui.updateStatus(`ULTRA: Q${this.stats.q} | Processing...`, 'info');
+                }
+                
+                // Ultra-short delay between questions
+                await new Promise(r => setTimeout(r, 100));
+                
+                // Check if finished
+                if (!this.getChoices().length && !this.getDragElements().draggable.length && !this.getDragElements().blanks.length) {
+                    ui.updateStatus('Quiz completed!', 'success');
+                    break;
+                }
+            }
+            
+            this.stop();
+        },
+        
+        removeBlur() {
+            const elements = document.querySelectorAll('[class*="blur"], [class*="disabled"], .locked');
+            elements.forEach(el => {
+                el.style.filter = 'none';
+                el.style.opacity = '1';
+                el.style.pointerEvents = 'auto';
+            });
+            ui.updateStatus(`Removed ${elements.length} blur elements`, 'success');
+        },
+        
+        stop() {
+            this.running = false;
+            this.questionCache = null;
+            this.choiceCache = null;
+            
+            // Clear video intervals
+            if (ultraVideo.forceInterval) {
+                clearInterval(ultraVideo.forceInterval);
+                ultraVideo.forceInterval = null;
+            }
+            
+            document.querySelectorAll('.btn.active').forEach(btn => btn.classList.remove('active'));
+            
+            const stats = safeMemory.getStats();
+            ui.updateStatus(`STOPPED | Q${this.stats.q}, ✅${this.stats.correct}, 🧠${this.stats.learned} | Memory: ${stats.total}`, 'warning');
+        }
+    };
+
+    // MINIMAL UI
     const ui = {
         create() {
-            if (document.getElementById('bee-bot-ui')) return;
+            if (document.getElementById('ultra-bot')) return;
             
-            const stats = memoryDB.getStats();
-            const videoInfo = videoController.getCurrentInfo();
+            const stats = safeMemory.getStats();
+            const videos = ultraVideo.findVideos();
             
             const container = document.createElement('div');
-            container.id = 'bee-bot-ui';
+            container.id = 'ultra-bot';
             container.innerHTML = `
                 <style>
-                    #bee-bot-ui {
+                    #ultra-bot {
                         position: fixed !important;
-                        top: 20px !important;
-                        right: 20px !important;
+                        top: 10px !important;
+                        right: 10px !important;
                         z-index: 999999 !important;
-                        background: linear-gradient(135deg, #ff6b6b, #ee5a24) !important;
+                        background: linear-gradient(135deg, #2c3e50, #34495e) !important;
                         color: white !important;
                         font-family: Arial, sans-serif !important;
-                        font-size: 12px !important;
-                        border-radius: 10px !important;
-                        box-shadow: 0 8px 25px rgba(0,0,0,0.3) !important;
-                        min-width: 280px !important;
-                        backdrop-filter: blur(10px) !important;
+                        font-size: 10px !important;
+                        border-radius: 6px !important;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important;
+                        min-width: 240px !important;
                     }
-                    .bee-header {
-                        background: rgba(0,0,0,0.2) !important;
-                        padding: 10px 15px !important;
+                    .ultra-header {
+                        background: rgba(0,0,0,0.4) !important;
+                        padding: 6px 10px !important;
                         display: flex !important;
                         justify-content: space-between !important;
                         align-items: center !important;
                         font-weight: bold !important;
-                        border-radius: 10px 10px 0 0 !important;
+                        border-radius: 6px 6px 0 0 !important;
+                        font-size: 11px !important;
                     }
-                    .bee-body {
-                        padding: 15px !important;
-                    }
-                    .bee-tabs {
-                        display: flex !important;
-                        margin-bottom: 10px !important;
-                        background: rgba(0,0,0,0.2) !important;
-                        border-radius: 5px !important;
-                        padding: 2px !important;
-                    }
-                    .bee-tab {
-                        flex: 1 !important;
-                        padding: 5px 8px !important;
-                        text-align: center !important;
-                        cursor: pointer !important;
-                        border-radius: 3px !important;
-                        transition: all 0.3s !important;
-                        font-size: 10px !important;
-                    }
-                    .bee-tab.active {
-                        background: rgba(255,255,255,0.3) !important;
-                    }
-                    .bee-content {
-                        display: none !important;
-                    }
-                    .bee-content.active {
-                        display: block !important;
-                    }
-                    .bee-btn {
-                        background: rgba(255,255,255,0.2) !important;
+                    .ultra-body { padding: 10px !important; }
+                    .btn {
+                        background: rgba(255,255,255,0.15) !important;
                         border: none !important;
                         color: white !important;
-                        padding: 6px 10px !important;
-                        border-radius: 4px !important;
+                        padding: 4px 6px !important;
+                        border-radius: 3px !important;
                         cursor: pointer !important;
                         margin: 2px !important;
-                        font-size: 10px !important;
-                        transition: all 0.3s !important;
+                        font-size: 9px !important;
+                        transition: all 0.2s !important;
                         width: 48% !important;
                     }
-                    .bee-btn:hover {
-                        background: rgba(255,255,255,0.3) !important;
-                        transform: translateY(-1px) !important;
-                    }
-                    .bee-btn.active {
-                        background: #27ae60 !important;
-                        box-shadow: 0 0 10px rgba(39,174,96,0.5) !important;
-                    }
-                    .bee-btn.full {
-                        width: 100% !important;
-                    }
-                    .bee-btn.danger {
-                        background: #e74c3c !important;
-                    }
-                    .bee-input, .bee-select {
-                        background: rgba(255,255,255,0.2) !important;
-                        border: none !important;
-                        color: white !important;
+                    .btn:hover { background: rgba(255,255,255,0.25) !important; }
+                    .btn.active { background: #27ae60 !important; }
+                    .btn.full { width: 100% !important; }
+                    .btn.danger { background: #e74c3c !important; }
+                    .status {
+                        background: rgba(0,0,0,0.3) !important;
                         padding: 5px !important;
                         border-radius: 3px !important;
-                        width: 48% !important;
-                        margin: 2px !important;
-                        font-size: 10px !important;
-                    }
-                    .bee-input::placeholder {
-                        color: rgba(255,255,255,0.7) !important;
-                    }
-                    .bee-status {
-                        background: rgba(0,0,0,0.3) !important;
-                        padding: 8px !important;
-                        border-radius: 4px !important;
-                        margin-top: 10px !important;
-                        font-size: 10px !important;
+                        margin-top: 6px !important;
+                        font-size: 8px !important;
                         text-align: center !important;
                     }
-                    .bee-stats {
+                    .stats {
                         background: rgba(0,0,0,0.2) !important;
-                        padding: 6px !important;
-                        border-radius: 4px !important;
-                        margin-bottom: 8px !important;
-                        font-size: 9px !important;
-                        line-height: 1.3 !important;
+                        padding: 3px !important;
+                        border-radius: 2px !important;
+                        margin-bottom: 4px !important;
+                        font-size: 8px !important;
                     }
-                    .bee-minimize {
-                        cursor: pointer !important;
-                        padding: 2px 6px !important;
-                        border-radius: 3px !important;
-                        background: rgba(255,255,255,0.2) !important;
-                    }
-                    .bee-video-info {
-                        font-size: 9px !important;
-                        margin-bottom: 8px !important;
-                        padding: 4px !important;
-                        background: rgba(0,0,0,0.2) !important;
-                        border-radius: 3px !important;
-                    }
+                    .minimize { cursor: pointer !important; padding: 1px 3px !important; background: rgba(255,255,255,0.2) !important; border-radius: 2px !important; }
                 </style>
                 
-                <div class="bee-header">
-                    <span>🐝 Bee Bot v3.0</span>
-                    <span class="bee-minimize">−</span>
+                <div class="ultra-header">
+                    <span>⚡ ULTRA v4.1</span>
+                    <span class="minimize">−</span>
                 </div>
                 
-                <div class="bee-body">
-                    <div class="bee-tabs">
-                        <div class="bee-tab active" data-tab="quiz">📝 Quiz</div>
-                        <div class="bee-tab" data-tab="memory">🧠 Memory</div>
-                        <div class="bee-tab" data-tab="video">🎥 Video</div>
+                <div class="ultra-body">
+                    <div class="stats">
+                        Memory: ${stats.total} (${stats.memoryUsage}) | Videos: ${videos}
                     </div>
                     
-                    <!-- Quiz Tab -->
-                    <div class="bee-content active" id="quiz-content">
-                        <button class="bee-btn" id="smart-mode">🎯 Smart Mode</button>
-                        <button class="bee-btn" id="brute-mode">🔄 Brute Force</button>
-                        <button class="bee-btn" id="spam-toggle">🚀 Spam Answer</button>
-                        <button class="bee-btn" id="remove-blur">👁️ Remove Blur</button>
-                        
-                        <div id="spam-controls" style="display: none; margin-top: 8px;">
-                            <select class="bee-select" id="spam-answer">
-                                <option value="A">A</option>
-                                <option value="B">B</option>
-                                <option value="C">C</option>
-                                <option value="D">D</option>
-                                <option value="E">E</option>
-                            </select>
-                            <input class="bee-input" type="number" id="spam-limit" value="30" min="1" max="100" placeholder="Limit">
-                            <button class="bee-btn full" id="start-spam">Start Spam</button>
-                        </div>
-                        
-                        <button class="bee-btn full danger" id="stop-all">⏹️ STOP ALL</button>
-                    </div>
+                    <button class="btn" id="ultra-btn">⚡ ULTRA MODE</button>
+                    <button class="btn" id="blur-btn">👁️ Blur</button>
                     
-                    <!-- Memory Tab -->
-                    <div class="bee-content" id="memory-content">
-                        <div class="bee-stats">
-                            📊 Memory Database<br>
-                            Total: ${stats.total} questions<br>
-                            Learned: ${stats.learned}<br>
-                            Updated: ${stats.lastUpdate}
-                        </div>
-                        <button class="bee-btn" id="export-mem">💾 Export</button>
-                        <button class="bee-btn" id="import-mem">📁 Import</button>
-                        <button class="bee-btn" id="clear-mem">🗑️ Clear</button>
-                        <button class="bee-btn" id="refresh-mem">🔄 Refresh</button>
-                        <input type="file" id="import-file" accept=".json" style="display: none;">
-                    </div>
+                    <button class="btn" id="speed-2">2x</button>
+                    <button class="btn" id="speed-5">5x</button>
                     
-                    <!-- Video Tab -->
-                    <div class="bee-content" id="video-content">
-                        <div class="bee-video-info">
-                            🎥 Found: ${videoInfo.length} video(s)<br>
-                            ${videoInfo.map(v => `${v.currentTime}/${v.duration}s @ ${v.speed}x`).join('<br>')}
-                        </div>
-                        <button class="bee-btn" id="speed-05">0.5x</button>
-                        <button class="bee-btn" id="speed-1">1x</button>
-                        <button class="bee-btn" id="speed-15">1.5x</button>
-                        <button class="bee-btn" id="speed-2">2x</button>
-                        <button class="bee-btn" id="speed-3">3x</button>
-                        <button class="bee-btn" id="speed-5">5x</button>
-                        <input class="bee-input" type="number" id="skip-time" placeholder="Skip to (sec)" style="width: 100%; margin: 4px 2px;">
-                        <button class="bee-btn" id="skip-custom">⏩ Skip</button>
-                        <button class="bee-btn" id="skip-end">⏭️ End</button>
-                    </div>
+                    <button class="btn" id="export-btn">💾 Export</button>
+                    <button class="btn" id="clear-btn">🗑️ Clear</button>
                     
-                    <div class="bee-status" id="status">Ready! Memory: ${stats.total} 🧠 Videos: ${videoInfo.length} 🎥</div>
+                    <button class="btn full danger" id="stop-btn">⏹️ STOP</button>
+                    
+                    <div class="status" id="status">Ready | 15ms speed | Memory safe</div>
                 </div>
             `;
             
@@ -529,20 +737,9 @@
         },
         
         bindEvents() {
-            // Tab switching
-            document.querySelectorAll('.bee-tab').forEach(tab => {
-                tab.onclick = () => {
-                    document.querySelectorAll('.bee-tab').forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.bee-content').forEach(c => c.classList.remove('active'));
-                    tab.classList.add('active');
-                    document.getElementById(`${tab.dataset.tab}-content`).classList.add('active');
-                };
-            });
-            
-            // Minimize
-            document.querySelector('.bee-minimize').onclick = () => {
-                const body = document.querySelector('.bee-body');
-                const min = document.querySelector('.bee-minimize');
+            document.querySelector('.minimize').onclick = () => {
+                const body = document.querySelector('.ultra-body');
+                const min = document.querySelector('.minimize');
                 if (body.style.display === 'none') {
                     body.style.display = 'block';
                     min.textContent = '−';
@@ -552,82 +749,41 @@
                 }
             };
             
-            // Quiz controls
-            document.getElementById('smart-mode').onclick = () => bot.startSmart();
-            document.getElementById('brute-mode').onclick = () => bot.startBrute();
-            document.getElementById('spam-toggle').onclick = () => {
-                const controls = document.getElementById('spam-controls');
-                controls.style.display = controls.style.display === 'none' ? 'block' : 'none';
-            };
-            document.getElementById('start-spam').onclick = () => {
-                const answer = document.getElementById('spam-answer').value;
-                const limit = parseInt(document.getElementById('spam-limit').value) || 30;
-                bot.startSpam(answer, limit);
-            };
-            document.getElementById('remove-blur').onclick = () => bot.removeBlur();
-            document.getElementById('stop-all').onclick = () => bot.stop();
+            document.getElementById('ultra-btn').onclick = () => ultraBot.startUltra();
+            document.getElementById('blur-btn').onclick = () => ultraBot.removeBlur();
+            document.getElementById('stop-btn').onclick = () => ultraBot.stop();
             
-            // Memory controls
-            document.getElementById('export-mem').onclick = () => memoryDB.export();
-            document.getElementById('import-mem').onclick = () => document.getElementById('import-file').click();
-            document.getElementById('import-file').onchange = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        try {
-                            const data = JSON.parse(e.target.result);
-                            localStorage.setItem(memoryDB.storageKey, e.target.result);
-                            this.updateStatus('Memory imported! 🧠', 'success');
-                        } catch (err) {
-                            this.updateStatus('Import failed! ❌', 'error');
-                        }
-                    };
-                    reader.readAsText(file);
-                }
-            };
-            document.getElementById('clear-mem').onclick = () => {
-                if (confirm('Clear all memory?')) {
-                    memoryDB.clear();
-                    this.updateStatus('Memory cleared! 🗑️', 'warning');
-                }
-            };
-            document.getElementById('refresh-mem').onclick = () => {
-                this.updateMemoryStats();
-            };
-            
-            // Video controls
-            document.getElementById('speed-05').onclick = () => this.setVideoSpeed(0.5);
-            document.getElementById('speed-1').onclick = () => this.setVideoSpeed(1);
-            document.getElementById('speed-15').onclick = () => this.setVideoSpeed(1.5);
-            document.getElementById('speed-2').onclick = () => this.setVideoSpeed(2);
-            document.getElementById('speed-3').onclick = () => this.setVideoSpeed(3);
-            document.getElementById('speed-5').onclick = () => this.setVideoSpeed(5);
-            document.getElementById('skip-custom').onclick = () => {
-                const time = parseInt(document.getElementById('skip-time').value);
-                if (time) {
-                    videoController.skipTo(time);
-                    this.updateStatus(`Skipped to ${time}s ⏩`, 'success');
-                }
-            };
-            document.getElementById('skip-end').onclick = () => {
-                if (videoController.skipToEnd()) {
-                    this.updateStatus('Skipped to end ⏭️', 'success');
+            document.getElementById('speed-2').onclick = () => {
+                if (ultraVideo.setSpeed(2)) {
+                    this.updateStatus('Video speed: 2x', 'success');
+                    document.getElementById('speed-2').classList.add('active');
+                    document.getElementById('speed-5').classList.remove('active');
                 } else {
-                    this.updateStatus('No videos found ❌', 'error');
+                    this.updateStatus('No videos found', 'error');
                 }
             };
-        },
-        
-        setVideoSpeed(speed) {
-            if (videoController.setSpeed(speed)) {
-                this.updateStatus(`Video speed: ${speed}x 🎥`, 'success');
-                // Update speed buttons visual feedback
-                document.querySelectorAll('[id^="speed-"]').forEach(btn => btn.classList.remove('active'));
-                document.getElementById(`speed-${speed.toString().replace('.', '')}`).classList.add('active');
-            } else {
-                this.updateStatus('No videos found ❌', 'error');
-            }
+            
+            document.getElementById('speed-5').onclick = () => {
+                if (ultraVideo.setSpeed(5)) {
+                    this.updateStatus('Video speed: 5x', 'success');
+                    document.getElementById('speed-5').classList.add('active');
+                    document.getElementById('speed-2').classList.remove('active');
+                } else {
+                    this.updateStatus('No videos found', 'error');
+                }
+            };
+            
+            document.getElementById('export-btn').onclick = () => {
+                safeMemory.export();
+                this.updateStatus('Memory exported', 'success');
+            };
+            
+            document.getElementById('clear-btn').onclick = () => {
+                if (confirm('Clear memory?')) {
+                    safeMemory.clear();
+                    this.updateStatus('Memory cleared', 'warning');
+                }
+            };
         },
         
         updateStatus(message, type = 'info') {
@@ -637,7 +793,6 @@
                 const colors = { info: 'white', success: '#2ecc71', error: '#e74c3c', warning: '#f39c12' };
                 status.style.color = colors[type] || 'white';
             }
-            console.log(`📊 ${message}`);
         },
         
         setActive(buttonId, active = true) {
@@ -646,386 +801,24 @@
                 if (active) btn.classList.add('active');
                 else btn.classList.remove('active');
             }
-        },
-        
-        updateMemoryStats() {
-            const stats = memoryDB.getStats();
-            const statsEl = document.querySelector('.bee-stats');
-            if (statsEl) {
-                statsEl.innerHTML = `
-                    📊 Memory Database<br>
-                    Total: ${stats.total} questions<br>
-                    Learned: ${stats.learned}<br>
-                    Updated: ${stats.lastUpdate}
-                `;
-            }
         }
     };
 
-    // Main Bot Logic
-    const bot = {
-        running: false,
-        mode: null,
-        stats: { q: 0, correct: 0, learned: 0 },
-        
-        getQuestion() {
-            const selectors = ['h1', 'h2', '.question', '[class*="question"]', 'p'];
-            for (const sel of selectors) {
-                const el = document.querySelector(sel);
-                if (el && el.innerText && el.innerText.trim().length > 15) {
-                    return el.innerText.trim();
-                }
-            }
-            return null;
-        },
-        
-        getChoices() {
-            const letters = ['A', 'B', 'C', 'D', 'E'];
-            return Array.from(document.querySelectorAll('p')).filter(el => {
-                const text = el.innerText?.trim();
-                if (!text) return false;
-                
-                if (letters.includes(text)) return true;
-                
-                const style = getComputedStyle(el);
-                return style.display === 'flex' && 
-                       parseFloat(style.fontSize) > 14 && 
-                       (style.fontWeight === 'bold' || parseInt(style.fontWeight) > 400);
-            });
-        },
-        
-        isCorrect() {
-            return Array.from(document.querySelectorAll('*')).some(el => 
-                el.innerText?.trim() === 'Correct!'
-            );
-        },
-        
-        isWrong() {
-            return Array.from(document.querySelectorAll('*')).some(el => 
-                el.innerText?.trim() === 'Incorrect!'
-            );
-        },
-        
-        async clickCheck() {
-            const btns = Array.from(document.querySelectorAll('p, button')).filter(el => {
-                const text = el.innerText?.trim().toLowerCase();
-                return text === 'check' || text === 'submit' || text === 'periksa';
-            });
-            
-            if (btns.length > 0) {
-                await stealth.click(btns[0]);
-                return true;
-            }
-            return false;
-        },
-        
-        async clickNext() {
-            const btns = Array.from(document.querySelectorAll('p, button, a')).filter(el => {
-                const text = el.innerText?.trim().toLowerCase();
-                return (text === 'next' || text === 'save & next' || text === 'continue') &&
-                       getComputedStyle(el).display !== 'none';
-            });
-            
-            if (btns.length > 0) {
-                await stealth.click(btns[0]);
-                return true;
-            }
-            return false;
-        },
-        
-        clearWrong() {
-            Array.from(document.querySelectorAll('*')).forEach(el => {
-                if (el.innerText?.trim() === 'Incorrect!') {
-                    try { el.remove(); } catch (e) {}
-                }
-            });
-        },
-        
-        async startSmart() {
-            if (this.running) {
-                ui.updateStatus('Bot already running! ⚠️', 'warning');
-                return;
-            }
-            
-            this.running = true;
-            this.mode = 'smart';
-            this.stats = { q: 0, correct: 0, learned: 0 };
-            
-            ui.updateStatus('🧠 Smart Mode: Using memory...', 'info');
-            ui.setActive('smart-mode', true);
-            
-            try {
-                let memoryHits = 0;
-                
-                for (let i = 0; i < 100 && this.running; i++) {
-                    const question = this.getQuestion();
-                    
-                    if (question) {
-                        const memory = memoryDB.find(question);
-                        
-                        if (memory && memory.confidence > 1) {
-                            console.log(`🧠 Using memory: ${memory.answer}`);
-                            
-                            if (await this.useMemoryAnswer(memory.answer)) {
-                                memoryHits++;
-                                this.stats.correct++;
-                                ui.updateStatus(`Smart: Memory ${memoryHits} | Q${this.stats.q}`, 'success');
-                                await stealth.wait(800);
-                                continue;
-                            }
-                        }
-                    }
-                    
-                    // Fallback to learning mode
-                    if (await this.learnQuestion(question)) {
-                        ui.updateStatus(`Smart: Learning | Q${this.stats.q} | 🧠${this.stats.learned}`, 'info');
-                    }
-                    
-                    await stealth.wait(1000);
-                }
-                
-            } catch (error) {
-                ui.updateStatus(`Smart error: ${error.message}`, 'error');
-            }
-            
-            this.stop();
-        },
-        
-        async useMemoryAnswer(answer) {
-            const choices = this.getChoices();
-            const target = choices.find(el => el.innerText?.trim() === answer);
-            
-            if (!target) return false;
-            
-            await stealth.click(target);
-            await stealth.wait(200);
-            await this.clickCheck();
-            await stealth.wait(400);
-            
-            if (this.isCorrect()) {
-                await this.clickNext();
-                this.stats.q++;
-                return true;
-            }
-            
-            return false;
-        },
-        
-        async learnQuestion(questionText) {
-            const choices = this.getChoices();
-            if (choices.length === 0) return false;
-            
-            this.clearWrong();
-            
-            for (const choice of choices) {
-                if (!this.running) break;
-                
-                const choiceText = choice.innerText?.trim();
-                
-                await stealth.click(choice);
-                await stealth.wait(150);
-                await this.clickCheck();
-                await stealth.wait(500);
-                
-                if (this.isCorrect()) {
-                    if (questionText && choiceText) {
-                        memoryDB.learn(questionText, choiceText, 'learning');
-                        this.stats.learned++;
-                    }
-                    
-                    this.stats.correct++;
-                    this.stats.q++;
-                    await stealth.wait(200);
-                    await this.clickNext();
-                    return true;
-                }
-                
-                if (this.isWrong()) {
-                    this.clearWrong();
-                    await stealth.wait(100);
-                }
-            }
-            
-            this.stats.q++;
-            return false;
-        },
-        
-        async startBrute() {
-            if (this.running) {
-                ui.updateStatus('Bot already running! ⚠️', 'warning');
-                return;
-            }
-            
-            this.running = true;
-            this.mode = 'brute';
-            this.stats = { q: 0, correct: 0, learned: 0 };
-            
-            ui.updateStatus('🔄 Brute Force: Learning mode...', 'info');
-            ui.setActive('brute-mode', true);
-            
-            try {
-                for (let i = 0; i < 150 && this.running; i++) {
-                    const question = this.getQuestion();
-                    
-                    if (await this.learnQuestion(question)) {
-                        ui.updateStatus(`Brute: Q${this.stats.q} | ✅${this.stats.correct} | 🧠${this.stats.learned}`, 'success');
-                    } else {
-                        ui.updateStatus(`Brute: Q${this.stats.q} | Trying...`, 'info');
-                    }
-                    
-                    await stealth.wait(900);
-                }
-                
-            } catch (error) {
-                ui.updateStatus(`Brute error: ${error.message}`, 'error');
-            }
-            
-            this.stop();
-        },
-        
-        async startSpam(answer, limit) {
-            if (this.running) {
-                ui.updateStatus('Bot already running! ⚠️', 'warning');
-                return;
-            }
-            
-            this.running = true;
-            this.mode = 'spam';
-            this.stats = { q: 0, correct: 0, learned: 0 };
-            
-            ui.updateStatus(`🚀 Spam ${answer}: Starting...`, 'info');
-            
-            try {
-                for (let i = 0; i < limit && this.running; i++) {
-                    const question = this.getQuestion();
-                    
-                    if (await this.spamAnswer(answer, question)) {
-                        this.stats.q++;
-                        ui.updateStatus(`Spam ${answer}: ${i + 1}/${limit} | Q${this.stats.q}`, 'success');
-                    }
-                    
-                    await stealth.wait(600);
-                    
-                    if (this.getChoices().length === 0) {
-                        ui.updateStatus('No more questions! ✅', 'success');
-                        break;
-                    }
-                }
-                
-            } catch (error) {
-                ui.updateStatus(`Spam error: ${error.message}`, 'error');
-            }
-            
-            this.stop();
-        },
-        
-        async spamAnswer(answer, questionText) {
-            const choices = this.getChoices();
-            const target = choices.find(el => el.innerText?.trim() === answer);
-            
-            if (!target) return false;
-            
-            await stealth.click(target);
-            await stealth.wait(150);
-            await this.clickCheck();
-            await stealth.wait(300);
-            
-            if (this.isCorrect() && questionText) {
-                memoryDB.learn(questionText, answer, 'spam');
-                this.stats.learned++;
-            }
-            
-            await this.clickNext();
-            return true;
-        },
-        
-        removeBlur() {
-            const selectors = [
-                '.bl-p-l.bl-relative.bl-col-between',
-                '[class*="blur"]',
-                '[style*="blur"]'
-            ];
-            
-            let count = 0;
-            selectors.forEach(sel => {
-                document.querySelectorAll(sel).forEach(el => {
-                    el.style.filter = 'none';
-                    el.style.webkitFilter = 'none';
-                    if (el.onblur) el.onblur = null;
-                    el.addEventListener('blur', e => {
-                        e.stopImmediatePropagation();
-                        e.preventDefault();
-                    }, true);
-                    count++;
-                });
-            });
-            
-            ui.updateStatus(`Blur removed: ${count} elements 👁️`, 'success');
-        },
-        
-        stop() {
-            this.running = false;
-            this.mode = null;
-            
-            document.querySelectorAll('.bee-btn.active').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            const stats = memoryDB.getStats();
-            ui.updateStatus(`Stopped | Session: Q${this.stats.q}, ✅${this.stats.correct}, 🧠${this.stats.learned} | Total: ${stats.total}`, 'warning');
-        }
-    };
-
-    // Initialize
+    // INITIALIZE
     try {
-        stealth.init();
         ui.create();
         
-        // Auto-learn from current page if possible
         setTimeout(() => {
-            const question = bot.getQuestion();
-            const isCurrentCorrect = bot.isCorrect();
-            
-            if (question && isCurrentCorrect) {
-                const selected = document.querySelector('input:checked, .selected, [class*="selected"]');
-                if (selected) {
-                    const answer = selected.closest('*')?.innerText?.trim();
-                    if (answer && ['A', 'B', 'C', 'D', 'E'].includes(answer)) {
-                        memoryDB.learn(question, answer, 'auto_learn');
-                        ui.updateStatus('Auto-learned from current page! 🧠', 'success');
-                    }
-                }
-            }
-        }, 1500);
-        
-        // Welcome
-        setTimeout(() => {
-            const stats = memoryDB.getStats();
-            const videos = videoController.getCurrentInfo();
-            ui.updateStatus(`Bee Bot ready! 🧠${stats.total} 🎥${videos.length} 🚀`, 'success');
-        }, 2000);
-        
-        console.log('✅ Beelingua Enhanced Bot v3.0 Ready!');
-        console.log('🧠 Memory System: Active');
-        console.log('🎥 Video Control: Active');
-        console.log('📱 UI Panel: Top-right corner');
-        
-        // Test video control immediately
-        setTimeout(() => {
-            const videos = videoController.findAllVideos();
-            if (videos.length > 0) {
-                console.log(`🎥 Found ${videos.length} video(s):`, videos.map(v => ({
-                    src: v.src?.substring(0, 50) || 'blob/stream',
-                    duration: Math.round(v.duration || 0),
-                    currentTime: Math.round(v.currentTime || 0),
-                    speed: v.playbackRate || 1
-                })));
-            }
+            const stats = safeMemory.getStats();
+            ui.updateStatus(`Ultra Bot ready! Memory: ${stats.total} | 15ms speed`, 'success');
         }, 1000);
         
+        console.log('✅ Ultra-Optimized Bot v4.1 Ready!');
+        console.log(`Memory system: ${safeMemory.getStats().storage} (${safeMemory.getStats().memoryUsage})`);
+        console.log('Speed: 15ms delays | Memory safe | Auto-cleanup');
+        
     } catch (error) {
-        console.error('❌ Bot initialization failed:', error);
-        alert('Bee Bot failed to load. Check console for details.');
+        console.error('Initialization failed:', error);
     }
 
 })();
